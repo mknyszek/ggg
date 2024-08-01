@@ -16,7 +16,7 @@ import (
 )
 
 func main() {
-    // Create a simple dataset.
+	// Create a simple dataset.
 	d := Empty()
 	cx, _ := Extend[int](d, "x")
 	cy, _ := Extend[float64](d, "y")
@@ -27,29 +27,29 @@ func main() {
 		i++
 	}
 
-    // Plot it.
+	// Plot it.
 	p := NewPlot().Layer(
-        &Layer1D[int, float64]{
-            Data: d,
-            X:    cx,
-            Y:    cy,
-            Geom: Line(PaletteColor(0), Constant(2.0)),
-        },
-    ).Layer(
-        &Layer1D[int, float64]{
-            Data: d,
-            X:    cx,
-            Y:    cy,
-            Geom: Points(PaletteColor(0), Constant(2.0)),
-        },
-    ).Presentation(
-        Title("My Chart"),
-        XAxis("boxes", LogScale(10)),
-        YAxis("tons of fish"),
-    )
+		&Layer1D[int, float64]{
+			Data: d,
+			X:    cx,
+			Y:    cy,
+			Geom: Line(PaletteColor(0), Constant(2.0)),
+		},
+	).Layer(
+		&Layer1D[int, float64]{
+			Data: d,
+			X:    cx,
+			Y:    cy,
+			Geom: Points(PaletteColor(0), Constant(2.0)),
+		},
+	).Presentation(
+		Title("My Chart"),
+		XAxis("boxes", LogScale(10)),
+		YAxis("tons of fish"),
+	)
 
-    // Render and write out the plot.
-    im, err := p.Render("dark", 2160, 1440)
+	// Render and write out the plot.
+	im, err := p.Render("dark", 2160, 1440)
 	if err != nil {
 		log.Fatal(err)
 	}
