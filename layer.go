@@ -25,11 +25,11 @@ type Layer1D[X, Y Scalar] struct {
 }
 
 func (l *Layer1D[X, Y]) xRange() (lo, hi float64) {
-	return colRange(l.X)
+	return colRange(l.Data, l.X)
 }
 
 func (l *Layer1D[X, Y]) yRange() (lo, hi float64) {
-	return colRange(l.Y)
+	return colRange(l.Data, l.Y)
 }
 
 func (l *Layer1D[X, Y]) render(theme *Theme, width, height int, xScale, yScale scaleFunc) (image.Image, error) {
@@ -54,11 +54,11 @@ func (l *Layer1D[X, Y]) render(theme *Theme, width, height int, xScale, yScale s
 	var ss []*series[X, Y]
 	// Split the data into series.
 	for row := range l.Data.Rows() {
-		key := l.Geom.grouping(row)
+		key := l.Geom.grouping(l.Data, row)
 		s, ok := smap[key]
 		if !ok {
 			n++
-			s = &series[X, Y]{x: l.X, y: l.Y}
+			s = &series[X, Y]{d: l.Data, x: l.X, y: l.Y}
 			smap[key] = s
 			ss = append(ss, s)
 		}
@@ -72,13 +72,13 @@ func (l *Layer1D[X, Y]) render(theme *Theme, width, height int, xScale, yScale s
 		// No statistic, take all points.
 		if l.Stat == nil {
 			for _, row := range s.rows {
-				draw(row, float64(Field(row, l.X)), float64(Field(row, l.Y)))
+				draw(l.Data, row, float64(l.X.Get(l.Data, row)), float64(l.Y.Get(l.Data, row)))
 			}
 			continue
 		}
 
 		// Apply statistic.
-		for row, ygroup := range group(s.rows, l.X, l.Y) {
+		for row, ygroup := range group(l.Data, s.rows, l.X, l.Y) {
 			y := l.Stat(func(yield func(Y) bool) {
 				for _, y := range ygroup {
 					if !yield(y) {
@@ -86,26 +86,26 @@ func (l *Layer1D[X, Y]) render(theme *Theme, width, height int, xScale, yScale s
 					}
 				}
 			})
-			draw(row, float64(Field(row, l.X)), y)
+			draw(l.Data, row, float64(l.X.Get(l.Data, row)), y)
 		}
 	}
 
 	return c.Image(), nil
 }
 
-func group[X, Y Scalar](rows []Row, x Column[X], y Column[Y]) iter.Seq2[Row, []Y] {
-	return func(yield func(Row, []Y) bool) {
+func group[X, Y Scalar](d *Dataset, rows []int, x Column[X], y Column[Y]) iter.Seq2[int, []Y] {
+	return func(yield func(int, []Y) bool) {
 		var lastX X
-		var lastRow Row
+		var lastRow int
 		var ys []Y
 		first := true
 		for _, r := range rows {
-			x := Field(r, x)
+			x := x.Get(d, r)
 			if first {
 				first = false
 				lastX = x
 				lastRow = r
-				ys = []Y{Field(r, y)}
+				ys = []Y{y.Get(d, r)}
 				continue
 			}
 			if lastX != x {
@@ -116,10 +116,10 @@ func group[X, Y Scalar](rows []Row, x Column[X], y Column[Y]) iter.Seq2[Row, []Y
 				// Reset state.
 				lastX = x
 				lastRow = r
-				ys = []Y{Field(r, y)}
+				ys = []Y{y.Get(d, r)}
 				continue
 			}
-			ys = append(ys, Field(r, y))
+			ys = append(ys, y.Get(d, r))
 		}
 		if !first {
 			if !yield(lastRow, ys) {
@@ -130,7 +130,8 @@ func group[X, Y Scalar](rows []Row, x Column[X], y Column[Y]) iter.Seq2[Row, []Y
 }
 
 type series[X, Y Scalar] struct {
-	rows []Row
+	d    *Dataset
+	rows []int
 	x    Column[X]
 	y    Column[Y]
 }
@@ -144,18 +145,18 @@ func (s *series[X, Y]) Swap(i, j int) {
 }
 
 func (s *series[X, Y]) Less(i, j int) bool {
-	xi, xj := Field(s.rows[i], s.x), Field(s.rows[j], s.x)
+	xi, xj := s.x.Get(s.d, s.rows[i]), s.x.Get(s.d, s.rows[j])
 	if xi == xj {
-		yi, yj := Field(s.rows[i], s.y), Field(s.rows[j], s.y)
+		yi, yj := s.y.Get(s.d, s.rows[i]), s.y.Get(s.d, s.rows[j])
 		return yi < yj
 	}
 	return xi < xj
 }
 
-func colRange[T Scalar](c Column[T]) (lo, hi float64) {
+func colRange[T Scalar](d *Dataset, c Column[T]) (lo, hi float64) {
 	hi = math.Inf(-1)
 	lo = math.Inf(1)
-	for value := range c.Values() {
+	for value := range c.All(d) {
 		v := float64(value)
 		if v < lo {
 			lo = v

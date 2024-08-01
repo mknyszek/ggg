@@ -15,15 +15,22 @@ import (
 	_ "github.com/mknyszek/ggg/themes/dark"
 )
 
+var (
+	colX = NewColumn[int]("x")
+	colY = NewColumn[float64]("y")
+)
+
 func main() {
 	// Create a simple dataset.
 	d := Empty()
-	cx, _ := Extend[int](d, "x")
-	cy, _ := Extend[float64](d, "y")
-	i := 0
-	for row := range Append(d, 100) {
-		SetField(row, cx, i)
-		SetField(row, cy, math.Cos(float64(i)/100.0))
+	d.AddColumn(colX)
+	d.AddColumn(colY)
+	d.Grow(100)
+
+	i := 1
+	for row := range d.Rows() {
+		colX.Set(d, row, i)
+		colY.Set(d, row, math.Cos(float64(i)/100.0))
 		i++
 	}
 
@@ -31,21 +38,21 @@ func main() {
 	p := NewPlot().Layer(
 		&Layer1D[int, float64]{
 			Data: d,
-			X:    cx,
-			Y:    cy,
+			X:    colX,
+			Y:    colY,
 			Geom: Line(PaletteColor(0), Constant(2.0)),
 		},
 	).Layer(
 		&Layer1D[int, float64]{
 			Data: d,
-			X:    cx,
-			Y:    cy,
+			X:    colX,
+			Y:    colY,
 			Geom: Points(PaletteColor(0), Constant(2.0)),
 		},
 	).Presentation(
 		Title("My Chart"),
-		XAxis("boxes", LogScale(10)),
-		YAxis("tons of fish"),
+		XAxis("bytes", LogScale(10)),
+		YAxis("bytes"),
 	)
 
 	// Render and write out the plot.

@@ -3,16 +3,16 @@ package ggg
 import "image/color"
 
 type Mapping[O comparable] struct {
-	selector func(Row) any
-	scale    func(*Theme, Row) O
+	selector func(*Dataset, int) any
+	scale    func(*Dataset, int, *Theme) O
 }
 
 func Constant[O comparable](value O) Mapping[O] {
 	return Mapping[O]{
-		selector: func(_ Row) any {
+		selector: func(_ *Dataset, _ int) any {
 			return nil
 		},
-		scale: func(_ *Theme, _ Row) O {
+		scale: func(_ *Dataset, _ int, _ *Theme) O {
 			return value
 		},
 	}
@@ -40,10 +40,10 @@ func ScaleOrdinal[I, O comparable](col Column[I], i []I, o []O, alt O) Mapping[O
 
 func PaletteColor(i uint64) Mapping[color.Color] {
 	return Mapping[color.Color]{
-		selector: func(_ Row) any {
+		selector: func(_ *Dataset, _ int) any {
 			return nil
 		},
-		scale: func(th *Theme, _ Row) color.Color {
+		scale: func(_ *Dataset, _ int, th *Theme) color.Color {
 			return th.SeriesPalette(uint64(i))
 		},
 	}
@@ -53,11 +53,11 @@ func NiceColors[I comparable](col Column[I]) Mapping[color.Color] {
 	m := make(map[I]color.Color)
 	n := uint64(0)
 	return Mapping[color.Color]{
-		selector: func(r Row) any {
-			return Field(r, col)
+		selector: func(d *Dataset, row int) any {
+			return col.Get(d, row)
 		},
-		scale: func(th *Theme, r Row) color.Color {
-			i := Field(r, col)
+		scale: func(d *Dataset, row int, th *Theme) color.Color {
+			i := col.Get(d, row)
 			if c, ok := m[i]; ok {
 				return c
 			}
@@ -71,22 +71,22 @@ func NiceColors[I comparable](col Column[I]) Mapping[color.Color] {
 
 func Scale[I, O comparable](col Column[I], f func(I) O) Mapping[O] {
 	return Mapping[O]{
-		selector: func(r Row) any {
-			return Field(r, col)
+		selector: func(d *Dataset, row int) any {
+			return col.Get(d, row)
 		},
-		scale: func(_ *Theme, r Row) O {
-			return f(Field(r, col))
+		scale: func(d *Dataset, row int, _ *Theme) O {
+			return f(col.Get(d, row))
 		},
 	}
 }
 
 func Identity[T comparable](col Column[T]) Mapping[T] {
 	return Mapping[T]{
-		selector: func(r Row) any {
-			return Field(r, col)
+		selector: func(d *Dataset, row int) any {
+			return col.Get(d, row)
 		},
-		scale: func(_ *Theme, r Row) T {
-			return Field(r, col)
+		scale: func(d *Dataset, row int, _ *Theme) T {
+			return col.Get(d, row)
 		},
 	}
 }

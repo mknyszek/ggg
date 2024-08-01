@@ -3,6 +3,8 @@ package ggg
 import (
 	"fmt"
 	"iter"
+	"reflect"
+	"unique"
 )
 
 // Dataset represents some data. The data are structured as a series
@@ -10,11 +12,12 @@ import (
 type Dataset struct {
 	columns []columnI
 	rows    int
-	colMap  map[string]int
+	colMap  map[unique.Handle[columnKey]]int
 }
 
 type columnData[T any] struct {
 	name   string
+	key    unique.Handle[columnKey]
 	values []T
 }
 
@@ -33,110 +36,151 @@ type columnI interface {
 
 // Empty returns an empty dataset.
 func Empty() *Dataset {
-	return &Dataset{colMap: make(map[string]int)}
+	return &Dataset{colMap: make(map[unique.Handle[columnKey]]int)}
 }
 
-// Extend creates a new column with the provided name and type and
-// extends the dataset with it. Returns a handle to the new column.
-func Extend[T any](d *Dataset, name string) (Column[T], bool) {
-	if _, ok := d.colMap[name]; ok {
-		return Column[T]{}, false
-	}
-	d.columns = append(d.columns, &columnData[T]{name, make([]T, d.rows)})
-	d.colMap[name] = len(d.columns)
-	return Column[T]{d, len(d.columns) - 1}, true
-}
-
-// Append adds new rows to the dataset and returns an iterator producing
+// Grow adds new rows to the dataset and returns an iterator producing
 // those new rows.
-func Append(d *Dataset, n int) iter.Seq[Row] {
-	r := d.rows
+func (d *Dataset) Grow(n int) {
 	d.rows += n
 	for _, c := range d.columns {
 		c.grow(n)
 	}
-	return func(yield func(Row) bool) {
-		for i := r; i < r+n; i++ {
-			if !yield(Row{d, i}) {
-				return
-			}
-		}
-	}
 }
 
 // Column represents a column of uniformly-typed values in a particular Dataset.
-//
-// TODO(mknyszek): Consider relaxing columns and allow them to be used on other
-// datasets, provided the column name and type match.
 type Column[T any] struct {
-	d *Dataset
-	i int
+	key   unique.Handle[columnKey]
+	cache *int
 }
 
-// Values returns an iterator over all the values in this column.
-func (c Column[T]) Values() iter.Seq[T] {
-	cd, ok := c.d.columns[c.i].(*columnData[T])
-	if !ok {
-		panic(fmt.Sprintf("column type does not match %T", *new(T)))
+// NewColumn returns a new column with the provided name that may be used to access
+// and mutate a dataset.
+func NewColumn[T any](name string) Column[T] {
+	return Column[T]{cache: new(int), key: unique.Make(columnKey{name: name, typ: reflect.TypeFor[T]()})}
+}
+
+type columnKey struct {
+	name string
+	typ  reflect.Type
+}
+
+// String returns a debug string for the column.
+func (c Column[T]) String() string {
+	v := c.key.Value()
+	return fmt.Sprintf("%s (%s)", v.name, v.typ)
+}
+
+// All returns an iterator over all values in the column in the dataset.
+func (c Column[T]) All(d *Dataset) iter.Seq[T] {
+	var colData *columnData[T]
+	if cd, ok := d.columns[*c.cache].(*columnData[T]); ok && cd.key == c.key {
+		// Fast path: our cache has the right index.
+		colData = cd
+	} else {
+		ci, ok := d.colMap[c.key]
+		if !ok {
+			panic(fmt.Sprintf("column %s not in dataset", c))
+		}
+		*c.cache = ci
+		colData = d.columns[ci].(*columnData[T])
 	}
 	return func(yield func(T) bool) {
-		for _, v := range cd.values {
-			if !yield(v) {
-				return
+		for _, value := range colData.values {
+			if !yield(value) {
+				break
 			}
 		}
 	}
 }
 
-// Row represents a single row in a Dataset. Its fields
-// may be accessed and mutated with Field and SetField.
-type Row struct {
-	d *Dataset
-	i int
+// Get retrieves a value in the dataset at a particular row for this column.
+func (c Column[T]) Get(d *Dataset, row int) T {
+	// Fast path: our cache has the right index.
+	if cd, ok := d.columns[*c.cache].(*columnData[T]); ok && cd.key == c.key {
+		return cd.values[row]
+	}
+	return c.getSlow(d, row)
+}
+
+//go:noinline
+func (c Column[T]) getSlow(d *Dataset, row int) T {
+	ci, ok := d.colMap[c.key]
+	if !ok {
+		panic(fmt.Sprintf("column %s not in dataset", c))
+	}
+	*c.cache = ci
+	return d.columns[ci].(*columnData[T]).values[row]
+}
+
+// Set sets a value in the dataset at a particular row for this column.
+func (c Column[T]) Set(d *Dataset, row int, value T) {
+	// Fast path: our cache has the right index.
+	if cd, ok := d.columns[*c.cache].(*columnData[T]); ok && cd.key == c.key {
+		cd.values[row] = value
+	}
+	c.setSlow(d, row, value)
+}
+
+//go:noinline
+func (c Column[T]) setSlow(d *Dataset, row int, value T) {
+	ci, ok := d.colMap[c.key]
+	if !ok {
+		panic(fmt.Sprintf("column %s not in dataset", c))
+	}
+	d.columns[ci].(*columnData[T]).values[row] = value
+}
+
+// Name returns the name of the column.
+func (c Column[T]) Name() string {
+	return c.key.Value().name
+}
+
+func (c Column[T]) colKey() unique.Handle[columnKey] {
+	return c.key
+}
+
+func (c Column[T]) newData(rows int) columnI {
+	return &columnData[T]{c.key.Value().name, c.key, make([]T, rows)}
+}
+
+// AnyColumn is a way to refer to Column[T] for all T.
+type AnyColumn interface {
+	Name() string
+
+	colKey() unique.Handle[columnKey]
+	newData(rows int) columnI
+}
+
+// AddColumn adds a new column to the dataset's structure. If the dataset already has
+// rows, the column's data will be zero-initialized.
+func (d *Dataset) AddColumn(c AnyColumn) bool {
+	key := c.colKey()
+	if _, ok := d.colMap[key]; ok {
+		return false
+	}
+	d.columns = append(d.columns, c.newData(d.rows))
+	d.colMap[key] = len(d.columns) - 1
+	return true
+}
+
+// Columns returns the number of columns in the dataset.
+func (d *Dataset) Columns() int {
+	return len(d.columns)
+}
+
+// ColumnNames returns an iterator over the names of columns in the dataset.
+func (d *Dataset) ColumnNames() iter.Seq[string] {
+	return func(yield func(string) bool) {
+		for _, c := range d.columns {
+			if !yield(c.id()) {
+				break
+			}
+		}
+	}
 }
 
 // Rows returns the number of rows in the dataset.
 func (d *Dataset) Rows() int {
 	return d.rows
-}
-
-// Rows returns an iterator over all the rows in the dataset.
-func (d *Dataset) All() iter.Seq[Row] {
-	return func(yield func(Row) bool) {
-		for i := range d.rows {
-			if !yield(Row{d, i}) {
-				return
-			}
-		}
-	}
-}
-
-// Field returns the entry of the provided row corresponding
-// to the provided column.
-//
-// Panics if the column is not from this dataset.
-func Field[T any](r Row, c Column[T]) T {
-	if c.d != r.d {
-		panic("attempted to access column in record for incorrect dataset")
-	}
-	cd, ok := r.d.columns[c.i].(*columnData[T])
-	if !ok {
-		panic(fmt.Sprintf("column type does not match %T", *new(T)))
-	}
-	return cd.values[r.i]
-}
-
-// SetField writes value into the entry of the provided row
-// corresponding to the provided column.
-//
-// Panics if the column is not from this dataset.
-func SetField[T any](r Row, c Column[T], value T) {
-	if c.d != r.d {
-		panic("attempted to access column in record for incorrect dataset")
-	}
-	cd, ok := r.d.columns[c.i].(*columnData[T])
-	if !ok {
-		panic(fmt.Sprintf("column type does not match %T: column type %T", *new(T), c))
-	}
-	cd.values[r.i] = value
 }
