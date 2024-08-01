@@ -40,11 +40,19 @@ func Empty() *Dataset {
 }
 
 // Grow adds new rows to the dataset and returns an iterator producing
-// those new rows.
-func (d *Dataset) Grow(n int) {
+// those new rows. Returns an iterator over the new row indices.
+func (d *Dataset) Grow(n int) iter.Seq[int] {
+	s := d.rows
 	d.rows += n
 	for _, c := range d.columns {
 		c.grow(n)
+	}
+	return func(yield func(int) bool) {
+		for i := s; i < s+n; i++ {
+			if !yield(i) {
+				break
+			}
+		}
 	}
 }
 

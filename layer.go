@@ -64,8 +64,9 @@ func (l *Layer1D[X, Y]) render(theme *Theme, width, height int, xScale, yScale s
 		}
 		s.rows = append(s.rows, row)
 	}
-	draw := l.Geom.drawer(theme, c, xScale, yScale, scaleFactor)
 	for _, s := range ss {
+		draw := l.Geom.drawer(theme, c, xScale, yScale, scaleFactor)
+
 		// Sort the rows by X then Y.
 		sort.Sort(s)
 

@@ -88,7 +88,7 @@ func (p *Plot) Render(theme string, width, height int) (image.Image, error) {
 	var xScale, yScale scaleFunc
 	if p.opts.x.logBase != 0 {
 		if p.opts.x.min <= 0 || p.opts.x.max <= 0 {
-			return nil, fmt.Errorf("specified log scale, but domain of X values is zero or negative")
+			return nil, fmt.Errorf("specified log scale, but domain of X values is zero or negative: [%f, %f]", p.opts.x.min, p.opts.x.max)
 		}
 		xScale = scaleLog(p.opts.x.logBase, p.opts.x.min, p.opts.x.max, padLeft, w-padRight)
 	} else {
@@ -96,7 +96,7 @@ func (p *Plot) Render(theme string, width, height int) (image.Image, error) {
 	}
 	if p.opts.y.logBase != 0 {
 		if p.opts.y.min <= 0 || p.opts.y.max <= 0 {
-			return nil, fmt.Errorf("specified log scale, but domain of Y values is zero or negative")
+			return nil, fmt.Errorf("specified log scale, but domain of Y values is zero or negative: [%f, %f]", p.opts.y.min, p.opts.y.max)
 		}
 		yScale = scaleLog(p.opts.y.logBase, p.opts.y.max, p.opts.y.min, padTop, h-padBot)
 	} else {

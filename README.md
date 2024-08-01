@@ -18,6 +18,7 @@ import (
 var (
 	colX = NewColumn[int]("x")
 	colY = NewColumn[float64]("y")
+	colS = NewColumn[string]("name")
 )
 
 func main() {
@@ -25,34 +26,28 @@ func main() {
 	d := Empty()
 	d.AddColumn(colX)
 	d.AddColumn(colY)
-	d.Grow(100)
+	d.AddColumn(colS)
 
 	i := 1
-	for row := range d.Rows() {
+	for row := range d.Grow(100) {
+		colS.Set(d, row, "mackeral")
 		colX.Set(d, row, i)
 		colY.Set(d, row, math.Cos(float64(i)/100.0))
 		i++
 	}
+	i = 1
+	for row := range d.Grow(100) {
+		colS.Set(d, row, "herring")
+		colX.Set(d, row, i)
+		colY.Set(d, row, math.Sin(float64(i)/100.0))
+		i++
+	}
 
 	// Plot it.
-	p := NewPlot().Layer(
-		&Layer1D[int, float64]{
-			Data: d,
-			X:    colX,
-			Y:    colY,
-			Geom: Line(PaletteColor(0), Constant(2.0)),
-		},
-	).Layer(
-		&Layer1D[int, float64]{
-			Data: d,
-			X:    colX,
-			Y:    colY,
-			Geom: Points(PaletteColor(0), Constant(2.0)),
-		},
-	).Presentation(
+	p := LinePlot(d, colX, colY, colS).Presentation(
 		Title("My Chart"),
-		XAxis("bytes", LogScale(10)),
-		YAxis("bytes"),
+		XAxis("boxes", LogScale(10)),
+		YAxis("tons of fish"),
 	)
 
 	// Render and write out the plot.
