@@ -17,13 +17,13 @@ type kindGeom1D int
 
 const (
 	kindBadGeom1D kindGeom1D = iota
-	kindPoints
+	kindPoint
 	kindLine
 )
 
-func Points(color Mapping[color.Color], size Mapping[float64]) Geom1D {
+func Point(color Mapping[color.Color], size Mapping[float64]) Geom1D {
 	return Geom1D{
-		kind:  kindPoints,
+		kind:  kindPoint,
 		color: color,
 		size:  size,
 		grouping: func(d *Dataset, row int) any {
@@ -49,7 +49,7 @@ type any2 struct {
 
 func (g Geom1D) drawer(th *Theme, c *gg.Context, xScale, yScale scaleFunc, scaleFactor float64) func(*Dataset, int, float64, float64) {
 	switch g.kind {
-	case kindPoints:
+	case kindPoint:
 		return func(d *Dataset, row int, x, y float64) {
 			c.SetColor(g.color.scale(d, row, th))
 			c.DrawCircle(xScale(x), yScale(y), scaleFactor*g.size.scale(d, row, th))
