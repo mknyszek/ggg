@@ -10,40 +10,46 @@ import (
 	"github.com/fogleman/gg"
 )
 
-type Layer interface {
+type AnyLayer interface {
 	xRange() (lo, hi float64)
 	yRange() (lo, hi float64)
 	render(theme *Theme, width, height int, xScale, yScale scaleFunc) (image.Image, error)
 }
 
-type Layer1D[X, Y Scalar] struct {
+type Layer[X, Y Scalar] struct {
 	Data *Dataset
 	X    Column[X]
 	Y    Column[Y]
-	Stat Statistic1D[Y]
-	Geom Geom1D
+	Stat Statistic[Y]
+	Geom *Geom
 }
 
-func (l *Layer1D[X, Y]) xRange() (lo, hi float64) {
+func (l *Layer[X, Y]) xRange() (lo, hi float64) {
 	return colRange(l.Data, l.X)
 }
 
-func (l *Layer1D[X, Y]) yRange() (lo, hi float64) {
+func (l *Layer[X, Y]) yRange() (lo, hi float64) {
 	return colRange(l.Data, l.Y)
 }
 
-func (l *Layer1D[X, Y]) render(theme *Theme, width, height int, xScale, yScale scaleFunc) (image.Image, error) {
-	if l.Geom.kind == kindBadGeom1D {
+func (l *Layer[X, Y]) render(theme *Theme, width, height int, xScale, yScale scaleFunc) (image.Image, error) {
+	if l.Geom == nil || l.Geom.kind == kindBadGeom {
 		return nil, fmt.Errorf("no initialized Geom for layer")
 	}
 	if l.Data == nil {
 		return nil, fmt.Errorf("no intended dataset specified for layer")
 	}
-	if l.X == *new(Column[X]) {
+	if !l.X.Valid() {
 		return nil, fmt.Errorf("no initialized X column for layer")
 	}
-	if l.Y == *new(Column[Y]) {
+	if !l.Y.Valid() {
 		return nil, fmt.Errorf("no initialized Y column for layer")
+	}
+	if !l.Stat.Valid() && l.Geom.Dimensions() != 1 {
+		return nil, fmt.Errorf("no statistic provided, but expected more than one Y dimensions")
+	}
+	if l.Stat.Valid() && l.Geom.Dimensions() != l.Stat.Dimensions() {
+		return nil, fmt.Errorf("dimensional mismatch: %d-dimensional geom, but %d-dimensional statistic", l.Geom.Dimensions(), l.Stat.Dimensions())
 	}
 
 	c := gg.NewContext(width, height)
@@ -64,6 +70,7 @@ func (l *Layer1D[X, Y]) render(theme *Theme, width, height int, xScale, yScale s
 		}
 		s.rows = append(s.rows, row)
 	}
+	yBuf := make([]float64, l.Geom.Dimensions())
 	for _, s := range ss {
 		draw := l.Geom.drawer(theme, c, xScale, yScale, scaleFactor)
 
@@ -71,26 +78,26 @@ func (l *Layer1D[X, Y]) render(theme *Theme, width, height int, xScale, yScale s
 		sort.Sort(s)
 
 		// No statistic, take all points.
-		if l.Stat == nil {
+		if !l.Stat.Valid() {
 			for _, row := range s.rows {
-				draw(l.Data, row, float64(l.X.Get(l.Data, row)), float64(l.Y.Get(l.Data, row)))
+				yBuf[0] = float64(l.Y.Get(l.Data, row))
+				draw(l.Data, row, float64(l.X.Get(l.Data, row)), yBuf)
 			}
 			continue
 		}
 
 		// Apply statistic.
 		for row, ygroup := range group(l.Data, s.rows, l.X, l.Y) {
-			y := l.Stat(func(yield func(Y) bool) {
+			l.Stat.ApplyInto(func(yield func(Y) bool) {
 				for _, y := range ygroup {
 					if !yield(y) {
 						break
 					}
 				}
-			})
-			draw(l.Data, row, float64(l.X.Get(l.Data, row)), y)
+			}, yBuf)
+			draw(l.Data, row, float64(l.X.Get(l.Data, row)), yBuf)
 		}
 	}
-
 	return c.Image(), nil
 }
 

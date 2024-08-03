@@ -68,6 +68,10 @@ func NewColumn[T any](name string) Column[T] {
 	return Column[T]{cache: new(int), key: unique.Make(columnKey{name: name, typ: reflect.TypeFor[T]()})}
 }
 
+func (c Column[T]) Valid() bool {
+	return c.key != unique.Handle[columnKey]{}
+}
+
 type columnKey struct {
 	name string
 	typ  reflect.Type

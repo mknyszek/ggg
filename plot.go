@@ -1,7 +1,7 @@
 package ggg
 
 type Plot struct {
-	layers []Layer
+	layers []AnyLayer
 	opts   presentOpts
 }
 
@@ -9,7 +9,7 @@ func NewPlot() *Plot {
 	return &Plot{}
 }
 
-func (p *Plot) Layer(l Layer) *Plot {
+func (p *Plot) Layer(l AnyLayer) *Plot {
 	p.layers = append(p.layers, l)
 	return p
 }
