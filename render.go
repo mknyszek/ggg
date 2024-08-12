@@ -202,6 +202,7 @@ var (
 	e2  = math.Sqrt(2)
 )
 
+// Port of d3-scale's linear tick algorithm.
 func linearTicks(start, stop float64, count int) []float64 {
 	if count <= 0 {
 		count = 5

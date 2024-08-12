@@ -79,10 +79,10 @@ Experimental work-in-progress. Don't expect backwards-compatibility.
 ## Possible future features
 
 Data model:
-- Parsing CSV/TSV.
-- Deleting rows and columns.
+- Filtering.
+- Deleting rows.
 - Joins across datasets.
-- Row-to-column transforms.
+- Pivoting.
 
 Visualization:
 - 2D layers (areas, etc.).
