@@ -79,7 +79,6 @@ Experimental work-in-progress. Don't expect backwards-compatibility.
 ## Possible future features
 
 Data model:
-- Filtering.
 - Deleting rows.
 - Joins across datasets.
 - Pivoting.

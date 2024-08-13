@@ -96,6 +96,20 @@ func (d *Dataset) Print(w io.Writer) error {
 	return tw.Flush()
 }
 
+// Filter returns an iterator over all rows that are accepted by the provided filter.
+func (d *Dataset) Filter(f Filter) iter.Seq[int] {
+	return func(yield func(int) bool) {
+		for i := range d.Rows() {
+			if !f.Accept(d, i) {
+				continue
+			}
+			if !yield(i) {
+				break
+			}
+		}
+	}
+}
+
 // Grow adds new rows to the dataset and returns an iterator producing
 // those new rows. Returns an iterator over the new row indices.
 func (d *Dataset) Grow(n int) iter.Seq[int] {
@@ -125,6 +139,7 @@ func NewColumn[T any](name string) Column[T] {
 	return Column[T]{cache: new(int), key: unique.Make(columnKey{name: name, typ: reflect.TypeFor[T]()})}
 }
 
+// Valid returns true if this is a valid column created with NewColumn.
 func (c Column[T]) Valid() bool {
 	return c.key != unique.Handle[columnKey]{}
 }
